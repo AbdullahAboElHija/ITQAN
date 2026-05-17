@@ -40,6 +40,10 @@ export async function registerRoutes(
 
   app.get("/api/projects", async (_req, res) => {
     const projects = await storage.getProjects();
+    // Cache at the CDN/edge for 60 s; allow revalidation for up to 5 min.
+    // This means the Vercel edge serves the response without hitting the
+    // serverless function (and therefore MongoDB) on every single request.
+    res.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     res.json(projects);
   });
 

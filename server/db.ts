@@ -12,7 +12,10 @@ export async function connectDB() {
 
   try {
     await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 5000,  // Fail fast on cold starts (was 10 s)
+      connectTimeoutMS: 5000,
+      maxPoolSize: 10,               // Appropriate for serverless
+      bufferCommands: false,         // Don't silently queue ops when disconnected
     });
     console.log("Connected to MongoDB");
     isConnected = true;
