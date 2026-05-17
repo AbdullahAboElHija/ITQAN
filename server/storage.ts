@@ -1,5 +1,5 @@
 import { type Project, type InsertProject } from "../shared/schema.ts";
-import { ProjectModel } from "./db.js";
+import { ProjectModel, connectDB } from "./db.js";
 
 export interface IStorage {
   getProjects(): Promise<Project[]>;
@@ -76,6 +76,7 @@ export class DatabaseStorage implements IStorage {
     const cached = getCached();
     if (cached) return cached.data;
 
+    await connectDB();
     const docs = await ProjectModel.find().sort({ sortOrder: 1 });
     const projects = docs.map(toProject);
     setCache(projects);
@@ -83,23 +84,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProject(id: string): Promise<Project | undefined> {
+    await connectDB();
     const doc = await ProjectModel.findById(id);
     return doc ? toProject(doc) : undefined;
   }
 
   async createProject(project: InsertProject): Promise<Project> {
+    await connectDB();
     const doc = await ProjectModel.create(project);
     invalidateCache();
     return toProject(doc);
   }
 
   async updateProject(id: string, project: Partial<InsertProject>): Promise<Project | undefined> {
+    await connectDB();
     const doc = await ProjectModel.findByIdAndUpdate(id, project, { new: true });
     invalidateCache();
     return doc ? toProject(doc) : undefined;
   }
 
   async deleteProject(id: string): Promise<boolean> {
+    await connectDB();
     const result = await ProjectModel.findByIdAndDelete(id);
     invalidateCache();
     return !!result;
