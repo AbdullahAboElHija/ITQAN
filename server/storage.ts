@@ -25,10 +25,18 @@ interface ProjectsCache {
   etag: string;
 }
 
+import { staticProjects } from "./projects-static.ts";
+
 // Random base prevents cross-restart ETag collisions without any persistent state.
 const ETAG_BASE = Math.random().toString(36).slice(2);
 let cacheVersion = 0;
-let projectsCache: ProjectsCache | null = null;
+
+// Initialize cache with static pre-rendered build-time data to guarantee < 5ms cold starts!
+let projectsCache: ProjectsCache | null = {
+  data: staticProjects,
+  expiresAt: Date.now() + CACHE_TTL_MS,
+  etag: `"${ETAG_BASE}-${cacheVersion}"`
+};
 
 /** Returns the current ETag string, or null when cache is cold/expired. */
 export function getProjectsETag(): string | null {

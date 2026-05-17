@@ -149,8 +149,8 @@ function AdminDashboard() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
-    queryKey: ["/api/projects"],
-    queryFn: () => fetch("/api/projects").then(r => r.json()),
+    queryKey: ["/api/projects", { admin: true }],
+    queryFn: () => fetch("/api/projects?bypass=true").then(r => r.json()),
   });
 
   const createMutation = useMutation({

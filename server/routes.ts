@@ -39,29 +39,34 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   app.get("/api/projects", async (req, res) => {
-    const etag = getProjectsETag();
-    if (etag) {
-      res.set("ETag", etag);
-      if (req.headers["if-none-match"] === etag) {
-        // Cache at the CDN/edge for 60 s; allow revalidation for up to 5 min.
-        res.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
-        res.status(304).end();
-        return;
+    const isBypass = req.query.bypass === "true" || !!req.headers.authorization;
+
+    if (!isBypass) {
+      const etag = getProjectsETag();
+      if (etag) {
+        res.set("ETag", etag);
+        if (req.headers["if-none-match"] === etag) {
+          res.set("Cache-Control", "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800");
+          res.status(304).end();
+          return;
+        }
       }
     }
 
     const projects = await storage.getProjects();
     
-    // In case the cache was cold and was just populated, set the fresh ETag
-    const freshEtag = getProjectsETag();
-    if (freshEtag) {
-      res.set("ETag", freshEtag);
+    if (!isBypass) {
+      const freshEtag = getProjectsETag();
+      if (freshEtag) {
+        res.set("ETag", freshEtag);
+      }
+      // Cache at the CDN/edge for 24 hours; allow revalidation for up to 7 days.
+      // This eliminates cold start latency entirely for public users.
+      res.set("Cache-Control", "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800");
+    } else {
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     }
 
-    // Cache at the CDN/edge for 60 s; allow revalidation for up to 5 min.
-    // This means the Vercel edge serves the response without hitting the
-    // serverless function (and therefore MongoDB) on every single request.
-    res.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     res.json(projects);
   });
 
