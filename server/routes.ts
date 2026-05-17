@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage.js";
+import { storage, getProjectsETag } from "./storage.js";
 import { insertProjectSchema } from "../shared/schema.js";
 import mongoose from "mongoose";
 import crypto from "crypto";
@@ -38,8 +38,26 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/projects", async (_req, res) => {
+  app.get("/api/projects", async (req, res) => {
+    const etag = getProjectsETag();
+    if (etag) {
+      res.set("ETag", etag);
+      if (req.headers["if-none-match"] === etag) {
+        // Cache at the CDN/edge for 60 s; allow revalidation for up to 5 min.
+        res.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+        res.status(304).end();
+        return;
+      }
+    }
+
     const projects = await storage.getProjects();
+    
+    // In case the cache was cold and was just populated, set the fresh ETag
+    const freshEtag = getProjectsETag();
+    if (freshEtag) {
+      res.set("ETag", freshEtag);
+    }
+
     // Cache at the CDN/edge for 60 s; allow revalidation for up to 5 min.
     // This means the Vercel edge serves the response without hitting the
     // serverless function (and therefore MongoDB) on every single request.

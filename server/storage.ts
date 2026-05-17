@@ -10,25 +10,48 @@ export interface IStorage {
 }
 
 // ---------------------------------------------------------------------------
-// Simple in-memory TTL cache for the projects list.
-// Projects change rarely – a 5-minute cache avoids a MongoDB round-trip on
-// every page load without any risk of serving stale data for long.
+// In-memory TTL cache + ETag for the projects list.
+//
+// ETag strategy: an integer counter (version) that increments on every write.
+// Comparing two integers for 304 decisions is O(1) — no JSON hashing needed.
+// The base is randomised on startup so stale browser ETags never match after
+// a server restart (which may mean new data in MongoDB).
 // ---------------------------------------------------------------------------
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-let projectsCache: { data: Project[]; expiresAt: number } | null = null;
 
-function getCached(): Project[] | null {
+interface ProjectsCache {
+  data: Project[];
+  expiresAt: number;
+  etag: string;
+}
+
+// Random base prevents cross-restart ETag collisions without any persistent state.
+const ETAG_BASE = Math.random().toString(36).slice(2);
+let cacheVersion = 0;
+let projectsCache: ProjectsCache | null = null;
+
+/** Returns the current ETag string, or null when cache is cold/expired. */
+export function getProjectsETag(): string | null {
   if (projectsCache && Date.now() < projectsCache.expiresAt) {
-    return projectsCache.data;
+    return projectsCache.etag;
+  }
+  return null;
+}
+
+function getCached(): ProjectsCache | null {
+  if (projectsCache && Date.now() < projectsCache.expiresAt) {
+    return projectsCache;
   }
   return null;
 }
 
 function setCache(data: Project[]) {
-  projectsCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+  const etag = `"${ETAG_BASE}-${cacheVersion}"`;
+  projectsCache = { data, expiresAt: Date.now() + CACHE_TTL_MS, etag };
 }
 
 function invalidateCache() {
+  cacheVersion++;        // bump so the next ETag is different
   projectsCache = null;
 }
 
@@ -51,7 +74,7 @@ function toProject(doc: any): Project {
 export class DatabaseStorage implements IStorage {
   async getProjects(): Promise<Project[]> {
     const cached = getCached();
-    if (cached) return cached;
+    if (cached) return cached.data;
 
     const docs = await ProjectModel.find().sort({ sortOrder: 1 });
     const projects = docs.map(toProject);
