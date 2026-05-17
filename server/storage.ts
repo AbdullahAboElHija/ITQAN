@@ -1,4 +1,4 @@
-import { type Project, type InsertProject } from "../shared/schema.ts";
+import { type Project, type InsertProject } from "../shared/schema.js";
 import { ProjectModel, connectDB } from "./db.js";
 
 export interface IStorage {
@@ -25,7 +25,7 @@ interface ProjectsCache {
   etag: string;
 }
 
-import { staticProjects } from "./projects-static.ts";
+import { staticProjects } from "./projects-static.js";
 
 // Random base prevents cross-restart ETag collisions without any persistent state.
 const ETAG_BASE = Math.random().toString(36).slice(2);
